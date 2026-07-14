@@ -4,17 +4,19 @@
 <meta charset="utf-8">
 <title>FileListDownloader</title>
 <style>
-  body { font-family: "Segoe UI", Arial, sans-serif; width: 270px; padding: 10px; }
+  body { font-family: "Segoe UI", Arial, sans-serif; width: 300px; padding: 10px; }
   h3 { margin: 0 0 8px 0; font-size: 14px; }
   label { display: block; margin: 8px 0 2px; font-size: 12px; }
-  input[type=number] { width: 100%; box-sizing: border-box; padding: 4px; }
+  input[type=number], input[type=text] { width: 100%; box-sizing: border-box; padding: 4px; }
   .row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
   .row label { margin: 0; font-size: 12px; }
   #status { font-size: 12px; margin-top: 8px; min-height: 16px; }
   .ok { color: #1a7f37; }
   .bad { color: #c62828; }
+  .warn { color: #b8790f; }
   button { width: 100%; padding: 6px; margin-top: 6px; cursor: pointer; }
-  .hint { font-size: 11px; color: #666; margin-top: 8px; }
+  .hint { font-size: 11px; color: #666; margin-top: 4px; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
 </style>
 </head>
 <body>
@@ -23,16 +25,37 @@
   <label for="port">Cổng kết nối tới ứng dụng</label>
   <input type="number" id="port" min="1024" max="65535">
 
+  <label for="token">Mã kết nối (lấy từ hộp thoại Cài đặt của ứng dụng)</label>
+  <input type="text" id="token" placeholder="dán mã kết nối vào đây">
+
   <div class="row">
     <input type="checkbox" id="autoCapture">
-    <label for="autoCapture">Tự động bắt mọi link tải xuống</label>
+    <label for="autoCapture">Tự động bắt link tải khớp danh sách bên dưới</label>
   </div>
+
+  <label for="minSizeKB">Chỉ tự động bắt file lớn hơn (KB)</label>
+  <input type="number" id="minSizeKB" min="0">
+  <p class="hint">0 = không giới hạn kích thước. Chỉ áp dụng khi trình duyệt biết trước dung lượng file.</p>
+
+  <label for="extList">Đuôi file được phép bắt (cách nhau dấu phẩy)</label>
+  <input type="text" id="extList">
 
   <button id="btnSave">Lưu</button>
   <button id="btnPing">Kiểm tra kết nối</button>
   <div id="status"></div>
 
-  <p class="hint">Mẹo: chuột phải vào 1 liên kết trên trang web → "Tải bằng FileListDownloader" để gửi link đó bất cứ lúc nào, không cần bật tự động bắt link.</p>
+  <hr>
+  <div class="row">
+    <input type="checkbox" id="floaterToggle">
+    <label for="floaterToggle">Hiện nút tải nổi khi rê chuột vào link/video (giống IDM)</label>
+  </div>
+  <p class="hint" id="floaterHint">Cần cấp quyền đọc nội dung trang web khi bật lần đầu.</p>
+
+  <hr>
+  <button id="btnScan">Quét & tải tất cả link tệp trên tab hiện tại</button>
+  <div id="scanStatus" class="hint"></div>
+
+  <p class="hint">Mẹo: chuột phải vào 1 liên kết hoặc vào khoảng trống của trang → menu "FileListDownloader" để gửi link bất cứ lúc nào, không cần bật tự động bắt link.</p>
 
   <script src="popup.js"></script>
 </body>

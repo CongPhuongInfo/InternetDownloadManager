@@ -1,4 +1,5 @@
 ﻿Imports System
+Imports System.Collections.Generic
 Imports System.IO
 Imports System.Net
 Imports System.Text
@@ -12,10 +13,17 @@ Public Class BrowserLinkReceivedEventArgs
 
     Public Url As String
     Public SuggestedFileName As String
+    Public Referer As String
+    ''' <summary>"manual" (chuột phải vào link / nút tải nổi - NÊN hỏi xác nhận),
+    ''' "auto" (tự động bắt tải của trình duyệt - không hỏi, giữ mượt),
+    ''' "batch" (quét hàng loạt link trên trang - không hỏi từng cái một).</summary>
+    Public Source As String
 
-    Public Sub New(url As String, suggestedFileName As String)
+    Public Sub New(url As String, suggestedFileName As String, Optional referer As String = Nothing, Optional source As String = "manual")
         Me.Url = url
         Me.SuggestedFileName = suggestedFileName
+        Me.Referer = referer
+        Me.Source = If(String.IsNullOrEmpty(source), "manual", source)
     End Sub
 End Class
 
@@ -24,9 +32,17 @@ End Class
 ''' trên trình duyệt (Chrome/Edge) gửi URL link đang tải sang chương trình.
 '''
 ''' Giao thức rất đơn giản (khỏi cần thư viện JSON ngoài vì build bằng vbc.exe thuần):
-'''   GET  /ping  -> {"ok":true,"app":"FileListDownloader"}   (để extension kiểm tra app có đang chạy)
-'''   POST /add   -> body JSON {"url":"...","filename":"..."} -> {"ok":true}
+'''   GET  /ping       -> {"ok":true,"app":"FileListDownloader","paired":true|false}
+'''   POST /add        -> body {"url":"...","filename":"...","referer":"..."} -> {"ok":true}
+'''   POST /add-batch  -> body {"urls":[{"url":"...","filename":"...","referer":"..."}, ...]}
+'''                        -> {"ok":true,"added":N}
 ''' Có bật CORS (Access-Control-Allow-Origin: *) để extension gọi fetch() trực tiếp được.
+'''
+''' BẢO MẬT: vì CORS mở cho mọi origin, BẤT KỲ trang web nào (không chỉ qua extension) đều có
+''' thể tự gọi thẳng /add nếu không có gì chặn lại. Vì vậy /add và /add-batch bắt buộc header
+''' "X-FLD-Token" khớp với ExpectedToken (sinh ngẫu nhiên, hiển thị trong hộp thoại Cài đặt để
+''' người dùng dán 1 lần vào popup của extension). /ping thì không bắt buộc token (chỉ để biết
+''' app có đang chạy hay không) nhưng có trả về "paired" để popup biết token đã đúng chưa.
 ''' </summary>
 Public Class BrowserBridgeServer
     Implements IDisposable
@@ -37,6 +53,10 @@ Public Class BrowserBridgeServer
     Private _listenerThread As Thread
     Private _port As Integer
     Private _running As Boolean
+
+    ''' <summary>Token bí mật mà extension phải gửi kèm (header X-FLD-Token) cho /add, /add-batch.
+    ''' Nếu để trống thì KHÔNG kiểm tra (không khuyến khích - chỉ để tương thích ngược).</summary>
+    Public Property ExpectedToken As String = ""
 
     Public ReadOnly Property IsRunning As Boolean
         Get
@@ -101,7 +121,7 @@ Public Class BrowserBridgeServer
 
             resp.Headers.Add("Access-Control-Allow-Origin", "*")
             resp.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type")
+            resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type, X-FLD-Token")
 
             If req.HttpMethod = "OPTIONS" Then
                 resp.StatusCode = 204
@@ -109,28 +129,58 @@ Public Class BrowserBridgeServer
                 Return
             End If
 
+            Dim providedToken As String = req.Headers("X-FLD-Token")
+            Dim tokenOk As Boolean = String.IsNullOrEmpty(ExpectedToken) OrElse
+                                      (Not String.IsNullOrEmpty(providedToken) AndAlso providedToken = ExpectedToken)
+
             If req.HttpMethod = "GET" AndAlso req.Url.AbsolutePath = "/ping" Then
-                WriteText(resp, "{""ok"":true,""app"":""FileListDownloader""}", "application/json")
+                WriteText(resp, "{""ok"":true,""app"":""FileListDownloader"",""paired"":" &
+                                 If(tokenOk, "true", "false") & "}", "application/json")
                 Return
             End If
 
-            If req.HttpMethod = "POST" AndAlso req.Url.AbsolutePath = "/add" Then
+            If req.HttpMethod = "POST" AndAlso (req.Url.AbsolutePath = "/add" OrElse req.Url.AbsolutePath = "/add-batch") Then
+                If Not tokenOk Then
+                    resp.StatusCode = 401
+                    WriteText(resp, "{""ok"":false,""error"":""invalid token""}", "application/json")
+                    Return
+                End If
+
                 Dim body As String
                 Using reader As New StreamReader(req.InputStream, req.ContentEncoding)
                     body = reader.ReadToEnd()
                 End Using
 
-                Dim url As String = ExtractJsonStringField(body, "url")
-                Dim fname As String = ExtractJsonStringField(body, "filename")
+                If req.Url.AbsolutePath = "/add" Then
+                    Dim url As String = ExtractJsonStringField(body, "url")
+                    Dim fname As String = ExtractJsonStringField(body, "filename")
+                    Dim referer As String = ExtractJsonStringField(body, "referer")
+                    Dim source As String = ExtractJsonStringField(body, "source")
 
-                If String.IsNullOrWhiteSpace(url) Then
-                    resp.StatusCode = 400
-                    WriteText(resp, "{""ok"":false,""error"":""missing url""}", "application/json")
-                    Return
+                    If String.IsNullOrWhiteSpace(url) Then
+                        resp.StatusCode = 400
+                        WriteText(resp, "{""ok"":false,""error"":""missing url""}", "application/json")
+                        Return
+                    End If
+
+                    RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, source))
+                    WriteText(resp, "{""ok"":true}", "application/json")
+                Else
+                    Dim arrInner As String = ExtractJsonArrayField(body, "urls")
+                    Dim added As Integer = 0
+                    If arrInner IsNot Nothing Then
+                        For Each objStr As String In SplitJsonObjects(arrInner)
+                            Dim url As String = ExtractJsonStringField(objStr, "url")
+                            Dim fname As String = ExtractJsonStringField(objStr, "filename")
+                            Dim referer As String = ExtractJsonStringField(objStr, "referer")
+                            If Not String.IsNullOrWhiteSpace(url) Then
+                                RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, "batch"))
+                                added += 1
+                            End If
+                        Next
+                    End If
+                    WriteText(resp, "{""ok"":true,""added"":" & added & "}", "application/json")
                 End If
-
-                RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname))
-                WriteText(resp, "{""ok"":true}", "application/json")
                 Return
             End If
 
@@ -202,6 +252,77 @@ Public Class BrowserBridgeServer
         End While
 
         Return sb.ToString()
+    End Function
+
+    ''' <summary>Lấy chuỗi thô bên trong [ ... ] của field mảng (vd "urls"), có theo dõi dấu ngoặc kép
+    ''' để không bị lẫn nếu 1 giá trị string chứa ký tự [ hoặc ]. Trả về Nothing nếu không tìm thấy.</summary>
+    Private Function ExtractJsonArrayField(json As String, fieldName As String) As String
+        If String.IsNullOrEmpty(json) Then Return Nothing
+        Dim key As String = """" & fieldName & """"
+        Dim keyIdx As Integer = json.IndexOf(key, StringComparison.OrdinalIgnoreCase)
+        If keyIdx < 0 Then Return Nothing
+        Dim bracketIdx As Integer = json.IndexOf("["c, keyIdx)
+        If bracketIdx < 0 Then Return Nothing
+
+        Dim depth As Integer = 0
+        Dim inStr As Boolean = False
+        Dim i As Integer = bracketIdx
+        While i < json.Length
+            Dim c As Char = json(i)
+            If inStr Then
+                If c = "\"c Then
+                    i += 1
+                ElseIf c = """"c Then
+                    inStr = False
+                End If
+            Else
+                If c = """"c Then
+                    inStr = True
+                ElseIf c = "["c Then
+                    depth += 1
+                ElseIf c = "]"c Then
+                    depth -= 1
+                    If depth = 0 Then Return json.Substring(bracketIdx + 1, i - bracketIdx - 1)
+                End If
+            End If
+            i += 1
+        End While
+        Return Nothing
+    End Function
+
+    ''' <summary>Cắt chuỗi bên trong 1 mảng JSON thành từng object con {..}, {..}, ... (theo dõi độ
+    ''' sâu ngoặc nhọn + trạng thái trong/ngoài chuỗi để không cắt nhầm).</summary>
+    Private Function SplitJsonObjects(arrayInner As String) As List(Of String)
+        Dim result As New List(Of String)
+        Dim depth As Integer = 0
+        Dim inStr As Boolean = False
+        Dim start As Integer = -1
+        Dim i As Integer = 0
+        While i < arrayInner.Length
+            Dim c As Char = arrayInner(i)
+            If inStr Then
+                If c = "\"c Then
+                    i += 1
+                ElseIf c = """"c Then
+                    inStr = False
+                End If
+            Else
+                If c = """"c Then
+                    inStr = True
+                ElseIf c = "{"c Then
+                    If depth = 0 Then start = i
+                    depth += 1
+                ElseIf c = "}"c Then
+                    depth -= 1
+                    If depth = 0 AndAlso start >= 0 Then
+                        result.Add(arrayInner.Substring(start, i - start + 1))
+                        start = -1
+                    End If
+                End If
+            End If
+            i += 1
+        End While
+        Return result
     End Function
 
     Public Sub Dispose() Implements IDisposable.Dispose

@@ -3,3 +3,4 @@ Concurrent=3
 DownloadFolder=D:\Source VBNet_C#\GitHub\FileManager-Tools\IDManager\Download
 BridgeEnabled=True
 BridgePort=39215
+BridgeToken=a23a692be7684df0b2bcb0491e64684f

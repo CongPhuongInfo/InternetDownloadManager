@@ -69,6 +69,7 @@ Public Class DownloadItem
     Public SupportsRange As Boolean
     Public Segments As List(Of DownloadSegment)
     Public LastError As String
+    Public Referer As String           ' Trang nguồn của link (nếu có) - 1 số host yêu cầu đúng Referer mới cho tải
 
     ' Cờ điều khiển - do DownloadQueueManager / thao tác từng dòng trên lưới đặt,
     ' các luồng tải nền tự kiểm tra định kỳ để dừng đúng chỗ.

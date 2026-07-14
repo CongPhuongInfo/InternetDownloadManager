@@ -29,7 +29,7 @@ echo.
 
 "%VBC%" /nologo /target:winexe /out:%OUTEXE% /optimize+ /optionstrict+ /optionexplicit+ ^
     /reference:System.dll,System.Windows.Forms.dll,System.Drawing.dll ^
-    Program.vb Form1.vb FileDownloadData.vb FileListBuilder.vb DownloadItem.vb FileDownloader.vb DownloadQueueManager.vb DownloadQueueState.vb BrowserBridgeServer.vb AddUrlDialog.vb CreateListDialog.vb DownloadFromListDialog.vb SettingsDialog.vb
+    Program.vb Form1.vb FileDownloadData.vb FileListBuilder.vb DownloadItem.vb FileDownloader.vb DownloadQueueManager.vb DownloadQueueState.vb BrowserBridgeServer.vb AddUrlDialog.vb CreateListDialog.vb DownloadFromListDialog.vb SettingsDialog.vb BrowserDownloadPromptDialog.vb
 
 if errorlevel 1 (
     echo.

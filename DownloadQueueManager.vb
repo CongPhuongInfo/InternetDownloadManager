@@ -121,6 +121,21 @@ Public Class DownloadQueueManager
     ''' dispatcher sẽ tự nhặt lên khi có chỗ trống, không cần dừng/khởi động lại hàng đợi.
     ''' Chỉ nên gọi khi IsBusy = True; nếu hàng đợi không chạy, Form1 tự tạo phiên mới thay vì gọi hàm này.
     ''' </summary>
+    ''' <summary>
+    ''' Chèn 1 tệp vào hàng đợi ở trạng thái Tạm dừng (KHÔNG tự chạy) - dùng cho lựa chọn
+    ''' "Tải sau" ở hộp thoại xác nhận khi nhận link từ trình duyệt. Khác AddItem() ở chỗ không ép
+    ''' về Pending nên dispatcher sẽ bỏ qua cho tới khi người dùng bấm "Tiếp tục".
+    ''' </summary>
+    Public Sub AddItemDeferred(item As DownloadItem)
+        SyncLock _lockObj
+            If _items Is Nothing Then _items = New List(Of DownloadItem)
+            item.Status = DownloadStatus.Paused
+            item.PauseRequested = False
+            item.CancelRequested = False
+            _items.Add(item)
+        End SyncLock
+    End Sub
+
     Public Sub AddItem(item As DownloadItem)
         SyncLock _lockObj
             If _items Is Nothing Then _items = New List(Of DownloadItem)

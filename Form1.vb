@@ -60,6 +60,7 @@ Public Class Form1
     Private _concurrent As Integer
     Private _bridgeEnabled As Boolean
     Private _bridgePort As Integer
+    Private _bridgeToken As String
 
     Public Sub New()
         InitializeComponent()
@@ -114,6 +115,7 @@ Public Class Form1
         _concurrent = 3
         _bridgePort = 39215
         _bridgeEnabled = False
+        _bridgeToken = Guid.NewGuid().ToString("N")
 
         Dim settingsPath As String = GetSettingsPath()
         If Not File.Exists(settingsPath) Then Return
@@ -140,6 +142,8 @@ Public Class Form1
                     Case "BridgePort"
                         Dim v As Integer
                         If Integer.TryParse(value, v) Then _bridgePort = v
+                    Case "BridgeToken"
+                        If value.Length > 0 Then _bridgeToken = value
                 End Select
             Next
         Catch ex As Exception
@@ -157,17 +161,19 @@ Public Class Form1
             lines.Add("DownloadFolder=" & _defaultDownloadFolder)
             lines.Add("BridgeEnabled=" & _bridgeEnabled.ToString())
             lines.Add("BridgePort=" & _bridgePort)
+            lines.Add("BridgeToken=" & _bridgeToken)
             File.WriteAllLines(GetSettingsPath(), lines.ToArray())
         Catch ex As Exception
         End Try
     End Sub
 
     Private Sub ShowSettingsDialog()
-        Using dlg As New SettingsDialog(_segments, _concurrent, _defaultDownloadFolder, _bridgeEnabled, _bridgePort)
+        Using dlg As New SettingsDialog(_segments, _concurrent, _defaultDownloadFolder, _bridgeEnabled, _bridgePort, _bridgeToken)
             If dlg.ShowDialog(Me) = DialogResult.OK Then
                 _segments = dlg.Segments
                 _concurrent = dlg.Concurrent
                 _defaultDownloadFolder = dlg.DefaultDownloadFolder
+                _bridgeToken = dlg.BrowserBridgeToken
 
                 If dlg.BrowserBridgeEnabled Then
                     TryStartBridge(dlg.BrowserBridgePort, False)
@@ -216,8 +222,7 @@ Public Class Form1
 
         If _queueManager IsNot Nothing AndAlso _queueManager.IsBusy Then
             For Each it As DownloadItem In newItems
-                _queueManager.AddItem(it)
-                _items.Add(it)
+                _queueManager.AddItem(it) ' _queueManager._items VÀ Form1._items là CÙNG 1 List - AddItem đã thêm vào rồi, không Add lại lần nữa
                 AddGridRow(it)
             Next
             lblOverallStatus.Text = "Đã thêm " & newItems.Count & " tệp vào hàng đợi."
@@ -234,6 +239,24 @@ Public Class Form1
             _queueManager.Start(_items, statePath)
             uiTimer.Enabled = True
         End If
+    End Sub
+
+    ''' <summary>"Tải sau": thêm tệp vào danh sách ở trạng thái Tạm dừng, không tự chạy - người dùng
+    ''' tự bấm "Tiếp tục" (từng dòng hoặc "Tiếp tục tất cả") khi muốn tải.</summary>
+    Private Sub AddItemDeferredToQueue(item As DownloadItem)
+        If _items Is Nothing Then _items = New List(Of DownloadItem)
+
+        If _queueManager IsNot Nothing AndAlso _queueManager.IsBusy Then
+            _queueManager.AddItemDeferred(item)
+            AddGridRow(item)
+        Else
+            item.Status = DownloadStatus.Paused
+            _items.Add(item)
+            BuildGridRows(_items)
+        End If
+
+        SetRunningButtonsState(_queueManager IsNot Nothing AndAlso _queueManager.IsBusy)
+        lblOverallStatus.Text = "Đã thêm """ & item.Data.FileName & """ - chờ tải (bấm ""Tiếp tục"" khi sẵn sàng)."
     End Sub
 
     Private Sub PauseAllDownloads()
@@ -392,6 +415,7 @@ Public Class Form1
         StopBridgeServer()
         Try
             _bridgeServer = New BrowserBridgeServer()
+            _bridgeServer.ExpectedToken = _bridgeToken
             AddHandler _bridgeServer.LinkReceived, AddressOf OnBrowserLinkReceived
             _bridgeServer.StartListening(port)
             _bridgeEnabled = True
@@ -421,23 +445,55 @@ Public Class Form1
         End If
 
         Try
-            Dim data As New FileDownloadData(e.Url)
-            Dim folder As String = Path.Combine(_defaultDownloadFolder, "TuTrinhDuyet")
+            If e.Source = "manual" Then
+                HandleManualBrowserLink(e)
+            Else
+                Dim data As New FileDownloadData(e.Url)
+                Dim folder As String = Path.Combine(_defaultDownloadFolder, "TuTrinhDuyet")
 
-            Dim it As New DownloadItem()
-            it.Data = data
-            it.LocalPath = data.GetLocalPathFlat(folder)
+                Dim it As New DownloadItem()
+                it.Data = data
+                it.LocalPath = data.GetLocalPathFlat(folder)
+                it.Referer = e.Referer
 
-            Dim newItems As New List(Of DownloadItem)
-            newItems.Add(it)
-            AddItemsToQueue(newItems)
+                Dim newItems As New List(Of DownloadItem)
+                newItems.Add(it)
+                AddItemsToQueue(newItems)
 
-            If Not Me.Visible OrElse Me.WindowState = FormWindowState.Minimized Then
-                _trayIcon.ShowBalloonTip(1500, "Đã nhận link mới", data.FileName, ToolTipIcon.Info)
+                If Not Me.Visible OrElse Me.WindowState = FormWindowState.Minimized Then
+                    _trayIcon.ShowBalloonTip(1500, "Đã nhận link mới", data.FileName, ToolTipIcon.Info)
+                End If
             End If
         Catch ex As Exception
             ' URL khong hop le gui tu extension - bo qua, khong lam gian doan cac tai khac
         End Try
+    End Sub
+
+    ''' <summary>Link bắt THỦ CÔNG (chuột phải vào link / nút tải nổi trên trình duyệt) - hiện hộp
+    ''' thoại xác nhận kiểu IDM (tên tệp/kích thước/nơi lưu + Tải sau/Tải xuống ngay/Huỷ) thay vì
+    ''' tự động thêm thẳng vào hàng đợi, để người dùng biết chính xác sắp tải gì trước khi tải.</summary>
+    Private Sub HandleManualBrowserLink(e As BrowserLinkReceivedEventArgs)
+        ' Neu form dang an/thu nho, dua len truoc de nguoi dung thay hop thoai xac nhan hien ra
+        If Not Me.Visible Then Me.Show()
+        If Me.WindowState = FormWindowState.Minimized Then Me.WindowState = FormWindowState.Normal
+        Me.Activate()
+
+        Using dlg As New BrowserDownloadPromptDialog(e.Url, e.SuggestedFileName, e.Referer)
+            Dim dr As DialogResult = dlg.ShowDialog(Me)
+            If dr <> DialogResult.OK Then Return ' Huỷ hoặc đóng bằng nút X - bỏ qua, không thêm gì cả
+
+            Dim data As New FileDownloadData(e.Url)
+            Dim it As New DownloadItem()
+            it.Data = data
+            it.LocalPath = dlg.SaveFullPath
+            it.Referer = e.Referer
+
+            If dlg.ChosenResult = DownloadPromptResult.DownloadNow Then
+                AddItemsToQueue(New List(Of DownloadItem) From {it})
+            ElseIf dlg.ChosenResult = DownloadPromptResult.DownloadLater Then
+                AddItemDeferredToQueue(it)
+            End If
+        End Using
     End Sub
 
     ' ========================================================================
@@ -578,7 +634,7 @@ Public Class Form1
     '  Định dạng hiển thị
     ' ------------------------------------------------------------------
 
-    Private Shared Function FormatBytes(bytes As Long) As String
+    Friend Shared Function FormatBytes(bytes As Long) As String
         If bytes < 0 Then Return "—"
         If bytes >= 1024L * 1024L * 1024L Then
             Return String.Format("{0:0.00} GB", bytes / 1024.0R / 1024.0R / 1024.0R)
