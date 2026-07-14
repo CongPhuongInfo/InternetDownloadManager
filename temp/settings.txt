@@ -1,0 +1,5 @@
+Segments=4
+Concurrent=3
+DownloadFolder=D:\Source VBNet_C#\GitHub\FileManager-Tools\IDManager\Download
+BridgeEnabled=True
+BridgePort=39215

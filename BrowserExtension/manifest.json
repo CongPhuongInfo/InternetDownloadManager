@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Gửi tới FileListDownloader (2CongLC)",
+  "version": "1.0.0",
+  "description": "Bắt liên kết tải xuống trên trình duyệt và gửi sang ứng dụng FileListDownloader để tải đa luồng, giống Internet Download Manager.",
+  "permissions": ["downloads", "contextMenus", "storage", "notifications"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FileListDownloader",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

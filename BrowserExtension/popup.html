@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>FileListDownloader</title>
+<style>
+  body { font-family: "Segoe UI", Arial, sans-serif; width: 270px; padding: 10px; }
+  h3 { margin: 0 0 8px 0; font-size: 14px; }
+  label { display: block; margin: 8px 0 2px; font-size: 12px; }
+  input[type=number] { width: 100%; box-sizing: border-box; padding: 4px; }
+  .row { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+  .row label { margin: 0; font-size: 12px; }
+  #status { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .ok { color: #1a7f37; }
+  .bad { color: #c62828; }
+  button { width: 100%; padding: 6px; margin-top: 6px; cursor: pointer; }
+  .hint { font-size: 11px; color: #666; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h3>FileListDownloader</h3>
+
+  <label for="port">Cổng kết nối tới ứng dụng</label>
+  <input type="number" id="port" min="1024" max="65535">
+
+  <div class="row">
+    <input type="checkbox" id="autoCapture">
+    <label for="autoCapture">Tự động bắt mọi link tải xuống</label>
+  </div>
+
+  <button id="btnSave">Lưu</button>
+  <button id="btnPing">Kiểm tra kết nối</button>
+  <div id="status"></div>
+
+  <p class="hint">Mẹo: chuột phải vào 1 liên kết trên trang web → "Tải bằng FileListDownloader" để gửi link đó bất cứ lúc nào, không cần bật tự động bắt link.</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
