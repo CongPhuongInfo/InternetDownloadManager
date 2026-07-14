@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="GameBomb-Logo.png" width="800">
+  <img src="IDMan-logo.png" width="800">
 </p>
 
 Công cụ Windows Forms (VB.NET, build bằng `vbc.exe`, không cần Visual Studio) tải tệp hàng loạt
