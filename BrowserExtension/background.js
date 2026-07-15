@@ -4,7 +4,7 @@
 const DEFAULT_PORT = 39215;
 const DEFAULT_MIN_SIZE_KB = 512;
 const DEFAULT_EXT_WHITELIST =
-  "rar,zip,7z,tar,gz,exe,msi,iso,apk,dmg,pkg,pdf,mp4,mkv,avi,mov,wmv,mp3,flac";
+  "rar,zip,7z,tar,gz,exe,msi,iso,apk,dmg,pkg,pdf,mp4,mkv,avi,mov,wmv,mp3,flac,m3u8,ts,m4a";
 
 function getSettings() {
   return new Promise((resolve) => {
@@ -36,14 +36,29 @@ function extOf(urlOrName) {
   }
 }
 
+// ---- Lấy Cookie của phiên trình duyệt cho 1 URL, dùng cho link cần đăng nhập/session ----
+// Cần quyền "cookies" + quyền host cho origin đó (đã xin chung với nút tải nổi). Nếu chưa được
+// cấp quyền hoặc origin không hợp lệ thì trả về chuỗi rỗng - im lặng bỏ qua, không phải lỗi thật
+// vì phần lớn link (rar/zip/mp4 tĩnh...) vốn không cần cookie cũng tải được bình thường.
+async function getCookieHeaderForUrl(url) {
+  try {
+    const cookies = await chrome.cookies.getAll({ url });
+    if (!cookies || cookies.length === 0) return "";
+    return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+  } catch (e) {
+    return "";
+  }
+}
+
 // ---- Gửi 1 link ----
 async function sendToApp(url, filename, referer, source) {
   const { port, token } = await getSettings();
+  const cookie = await getCookieHeaderForUrl(url);
   try {
     const resp = await fetch(`${appBaseUrl(port)}/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-FLD-Token": token || "" },
-      body: JSON.stringify({ url, filename: filename || "", referer: referer || "", source: source || "manual" })
+      body: JSON.stringify({ url, filename: filename || "", referer: referer || "", source: source || "manual", cookie })
     });
     return resp.ok;
   } catch (e) {
@@ -54,13 +69,14 @@ async function sendToApp(url, filename, referer, source) {
 // ---- Gửi nhiều link cùng lúc (quét link trên trang) ----
 async function sendBatchToApp(items, referer) {
   const { port, token } = await getSettings();
+  const withCookies = await Promise.all(
+    items.map(async (it) => ({ url: it.url, filename: it.filename || "", referer: referer || "", cookie: await getCookieHeaderForUrl(it.url) }))
+  );
   try {
     const resp = await fetch(`${appBaseUrl(port)}/add-batch`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-FLD-Token": token || "" },
-      body: JSON.stringify({
-        urls: items.map((it) => ({ url: it.url, filename: it.filename || "", referer: referer || "" }))
-      })
+      body: JSON.stringify({ urls: withCookies })
     });
     if (!resp.ok) return { ok: false, added: 0 };
     const data = await resp.json();
@@ -139,6 +155,55 @@ async function disableFloater() {
     } catch (e) {}
   }
 })();
+
+// ---- Dò link media (video/audio/HLS) qua tầng network, KHÔNG chỉ đọc DOM <video>/<audio> ----
+// Bắt được cả trường hợp JS giấu URL thật sau blob: hay MSE, vì request gốc tới CDN vẫn phải đi
+// qua đây trước khi trình duyệt gói lại thành blob. Cần cùng quyền host đã xin cho nút tải nổi
+// (FLOATER_ORIGINS) - webRequest chỉ "nhìn thấy" request trên các origin mà extension có quyền.
+// Chỉ lưu TẠM trong bộ nhớ theo từng tab (mất khi tab đóng hoặc service worker khởi động lại) -
+// không tự động gửi gì cả, người dùng phải mở popup và bấm "Gửi" cho từng link (giữ đúng nguyên
+// tắc không "cướp" quyền chọn nguồn tải của người dùng).
+const MEDIA_URL_RE = /\.(m3u8|mpd|mp4|webm|mp3|m4a|ts)(\?|#|$)/i;
+const foundMediaByTab = new Map(); // tabId -> Map(url -> {url, contentType, filename})
+const MAX_ENTRIES_PER_TAB = 60;
+
+function extIsMediaLike(url, contentType) {
+  if (contentType && /^(video|audio)\//i.test(contentType)) return true;
+  if (contentType && /mpegurl|dash\+xml/i.test(contentType)) return true; // m3u8 / mpd content-type
+  return MEDIA_URL_RE.test(url);
+}
+
+function registerFoundMedia(tabId, url, contentType) {
+  if (tabId == null || tabId < 0) return;
+  if (!foundMediaByTab.has(tabId)) foundMediaByTab.set(tabId, new Map());
+  const bucket = foundMediaByTab.get(tabId);
+  if (bucket.has(url)) return;
+  if (bucket.size >= MAX_ENTRIES_PER_TAB) return;
+
+  const clean = url.split("?")[0].split("#")[0];
+  const filename = clean.split("/").pop() || "media";
+  bucket.set(url, { url, contentType: contentType || "", filename });
+}
+
+try {
+  chrome.webRequest.onHeadersReceived.addListener(
+    (details) => {
+      if (!details.responseHeaders) return;
+      const ctHeader = details.responseHeaders.find((h) => h.name.toLowerCase() === "content-type");
+      const contentType = ctHeader ? ctHeader.value : "";
+      if (extIsMediaLike(details.url, contentType)) {
+        registerFoundMedia(details.tabId, details.url, contentType);
+      }
+    },
+    { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "other"] },
+    ["responseHeaders"]
+  );
+} catch (e) {
+  // Trinh duyet khong ho tro webRequest (hiem) hoac chua duoc cap quyen host - bo qua im lang,
+  // tinh nang dan link thu cong / context menu / nut noi van hoat dong binh thuong.
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => foundMediaByTab.delete(tabId));
 
 // ---- Menu chuột phải trên link: gửi thủ công 1 link ----
 // ---- Menu chuột phải trên trang: quét & gửi tất cả link tệp trên trang ----
@@ -303,6 +368,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.action === "disableFloater") {
     disableFloater().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg && msg.action === "getFoundMedia") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs && tabs[0];
+      const bucket = tab ? foundMediaByTab.get(tab.id) : null;
+      const list = bucket ? Array.from(bucket.values()) : [];
+      sendResponse({ list, pageUrl: tab ? tab.url : "" });
+    });
+    return true;
+  }
+  if (msg && msg.action === "sendFoundMedia") {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      const tab = tabs && tabs[0];
+      const referer = (tab && tab.url) || "";
+      const ok = await sendToApp(msg.url, msg.filename || "", referer, "manual");
+      if (!ok) notify("Không gửi được link", 'Không kết nối được tới FileListDownloader hoặc sai mã kết nối.');
+      sendResponse({ ok });
+    });
     return true;
   }
   if (msg && msg.action === "getFloaterStatus") {

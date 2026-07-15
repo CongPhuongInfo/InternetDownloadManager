@@ -14,15 +14,17 @@ Public Class BrowserLinkReceivedEventArgs
     Public Url As String
     Public SuggestedFileName As String
     Public Referer As String
+    Public Cookie As String
     ''' <summary>"manual" (chuột phải vào link / nút tải nổi - NÊN hỏi xác nhận),
     ''' "auto" (tự động bắt tải của trình duyệt - không hỏi, giữ mượt),
     ''' "batch" (quét hàng loạt link trên trang - không hỏi từng cái một).</summary>
     Public Source As String
 
-    Public Sub New(url As String, suggestedFileName As String, Optional referer As String = Nothing, Optional source As String = "manual")
+    Public Sub New(url As String, suggestedFileName As String, Optional referer As String = Nothing, Optional source As String = "manual", Optional cookie As String = Nothing)
         Me.Url = url
         Me.SuggestedFileName = suggestedFileName
         Me.Referer = referer
+        Me.Cookie = cookie
         Me.Source = If(String.IsNullOrEmpty(source), "manual", source)
     End Sub
 End Class
@@ -33,8 +35,8 @@ End Class
 '''
 ''' Giao thức rất đơn giản (khỏi cần thư viện JSON ngoài vì build bằng vbc.exe thuần):
 '''   GET  /ping       -> {"ok":true,"app":"FileListDownloader","paired":true|false}
-'''   POST /add        -> body {"url":"...","filename":"...","referer":"..."} -> {"ok":true}
-'''   POST /add-batch  -> body {"urls":[{"url":"...","filename":"...","referer":"..."}, ...]}
+'''   POST /add        -> body {"url":"...","filename":"...","referer":"...","cookie":"..."} -> {"ok":true}
+'''   POST /add-batch  -> body {"urls":[{"url":"...","filename":"...","referer":"...","cookie":"..."}, ...]}
 '''                        -> {"ok":true,"added":N}
 ''' Có bật CORS (Access-Control-Allow-Origin: *) để extension gọi fetch() trực tiếp được.
 '''
@@ -156,6 +158,7 @@ Public Class BrowserBridgeServer
                     Dim fname As String = ExtractJsonStringField(body, "filename")
                     Dim referer As String = ExtractJsonStringField(body, "referer")
                     Dim source As String = ExtractJsonStringField(body, "source")
+                    Dim cookie As String = ExtractJsonStringField(body, "cookie")
 
                     If String.IsNullOrWhiteSpace(url) Then
                         resp.StatusCode = 400
@@ -163,7 +166,7 @@ Public Class BrowserBridgeServer
                         Return
                     End If
 
-                    RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, source))
+                    RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, source, cookie))
                     WriteText(resp, "{""ok"":true}", "application/json")
                 Else
                     Dim arrInner As String = ExtractJsonArrayField(body, "urls")
@@ -173,8 +176,9 @@ Public Class BrowserBridgeServer
                             Dim url As String = ExtractJsonStringField(objStr, "url")
                             Dim fname As String = ExtractJsonStringField(objStr, "filename")
                             Dim referer As String = ExtractJsonStringField(objStr, "referer")
+                            Dim cookie As String = ExtractJsonStringField(objStr, "cookie")
                             If Not String.IsNullOrWhiteSpace(url) Then
-                                RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, "batch"))
+                                RaiseEvent LinkReceived(Me, New BrowserLinkReceivedEventArgs(url.Trim(), fname, referer, "batch", cookie))
                                 added += 1
                             End If
                         Next

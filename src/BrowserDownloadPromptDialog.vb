@@ -87,9 +87,10 @@ Public Class BrowserDownloadPromptDialog
     End Function
 
     ''' <summary>Lấy đúng thư mục Downloads thật của Windows (không phải Environment.SpecialFolder -
-    ''' enum đó KHÔNG có mục Downloads trên .NET Framework). Phương án dự phòng nếu API lỗi:
+    ''' enum đó KHÔNG có mục Downloads trên .NET Framework), kể cả khi người dùng đã đổi vị trí
+    ''' thư mục Downloads sang ổ đĩa khác qua Properties > Location. Phương án dự phòng nếu API lỗi:
     ''' %USERPROFILE%\Downloads.</summary>
-    Private Shared Function GetSystemDownloadsFolder() As String
+    Public Shared Function GetSystemDownloadsFolder() As String
         Try
             Dim downloadsFolderId As New Guid("374DE290-123F-4565-9164-39C4925E467B")
             Dim pathPtr As IntPtr = IntPtr.Zero

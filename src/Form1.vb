@@ -110,7 +110,7 @@ Public Class Form1
     End Function
 
     Private Sub LoadSettings()
-        _defaultDownloadFolder = Path.Combine(Directory.GetCurrentDirectory(), "Download")
+        _defaultDownloadFolder = BrowserDownloadPromptDialog.GetSystemDownloadsFolder()
         _segments = 4
         _concurrent = 3
         _bridgePort = 39215
@@ -377,6 +377,7 @@ Public Class Form1
                         Dim it As New DownloadItem()
                         it.Data = data
                         it.LocalPath = data.GetLocalPathFlat(dlg.DestinationFolder)
+                        MarkAsHlsIfNeeded(it)
                         newItems.Add(it)
                     Catch ex As Exception
                         ' URL khong hop le - bo qua dong nay
@@ -410,6 +411,17 @@ Public Class Form1
     ' ========================================================================
     '  NHẬN LINK TỪ TRÌNH DUYỆT (BrowserBridgeServer)
     ' ========================================================================
+
+    ''' <summary>Nếu it.Data.Url là playlist HLS (.m3u8), đánh dấu IsHlsStream = True và đổi đuôi
+    ''' tệp đích sang .ts (kết quả tải là 1 tệp MPEG-TS ghép nối các đoạn, không phải văn bản
+    ''' playlist gốc) - gọi ngay sau khi gán it.Data/it.LocalPath, trước khi thêm vào hàng đợi.</summary>
+    Private Sub MarkAsHlsIfNeeded(it As DownloadItem)
+        If Not HlsDownloader.LooksLikeHls(it.Data.Url) Then Return
+        it.IsHlsStream = True
+        Dim dir As String = Path.GetDirectoryName(it.LocalPath)
+        Dim baseName As String = Path.GetFileNameWithoutExtension(it.LocalPath)
+        it.LocalPath = Path.Combine(dir, baseName & ".ts")
+    End Sub
 
     Private Sub TryStartBridge(port As Integer, silent As Boolean)
         StopBridgeServer()
@@ -455,6 +467,8 @@ Public Class Form1
                 it.Data = data
                 it.LocalPath = data.GetLocalPathFlat(folder)
                 it.Referer = e.Referer
+                it.Cookie = e.Cookie
+                MarkAsHlsIfNeeded(it)
 
                 Dim newItems As New List(Of DownloadItem)
                 newItems.Add(it)
@@ -487,6 +501,8 @@ Public Class Form1
             it.Data = data
             it.LocalPath = dlg.SaveFullPath
             it.Referer = e.Referer
+            it.Cookie = e.Cookie
+            MarkAsHlsIfNeeded(it)
 
             If dlg.ChosenResult = DownloadPromptResult.DownloadNow Then
                 AddItemsToQueue(New List(Of DownloadItem) From {it})

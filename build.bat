@@ -2,7 +2,11 @@
 setlocal enabledelayedexpansion
 
 set APPNAME=IDManager
-set OUTEXE=%APPNAME%.exe
+set SRC=src
+set BIN=bin
+set OUTEXE=%BIN%\%APPNAME%.exe
+
+if not exist "%BIN%" mkdir "%BIN%"
 
 set VBC=
 for %%v in (v4.0.30319 v4.0.30128 v4.0.21006 v4.0.20506) do (
@@ -29,7 +33,11 @@ echo.
 
 "%VBC%" /nologo /target:winexe /out:%OUTEXE% /optimize+ /optionstrict+ /optionexplicit+ ^
     /reference:System.dll,System.Windows.Forms.dll,System.Drawing.dll ^
-    Program.vb Form1.vb FileDownloadData.vb FileListBuilder.vb DownloadItem.vb FileDownloader.vb DownloadQueueManager.vb DownloadQueueState.vb BrowserBridgeServer.vb AddUrlDialog.vb CreateListDialog.vb DownloadFromListDialog.vb SettingsDialog.vb BrowserDownloadPromptDialog.vb
+    %SRC%\Program.vb %SRC%\Form1.vb %SRC%\FileDownloadData.vb %SRC%\FileListBuilder.vb ^
+    %SRC%\DownloadItem.vb %SRC%\FileDownloader.vb %SRC%\HlsDownloader.vb ^
+    %SRC%\DownloadQueueManager.vb %SRC%\DownloadQueueState.vb %SRC%\BrowserBridgeServer.vb ^
+    %SRC%\AddUrlDialog.vb %SRC%\CreateListDialog.vb %SRC%\DownloadFromListDialog.vb ^
+    %SRC%\SettingsDialog.vb %SRC%\BrowserDownloadPromptDialog.vb
 
 if errorlevel 1 (
     echo.

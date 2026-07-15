@@ -17,6 +17,10 @@
   button { width: 100%; padding: 6px; margin-top: 6px; cursor: pointer; }
   .hint { font-size: 11px; color: #666; margin-top: 4px; }
   hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
+  .mediaItem { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #eee; }
+  .mediaItem .name { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mediaItem button { width: auto; padding: 3px 8px; margin: 0; font-size: 11px; }
+  .kindTag { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #eee; color: #555; }
 </style>
 </head>
 <body>
@@ -54,6 +58,12 @@
   <hr>
   <button id="btnScan">Quét & tải tất cả link tệp trên tab hiện tại</button>
   <div id="scanStatus" class="hint"></div>
+
+  <hr>
+  <h3>Video/audio phát hiện được trên tab</h3>
+  <p class="hint">Cần bật nút tải nổi ở trên (để có quyền đọc mạng trang) mới dò được. Chỉ liệt kê
+  link file thật (mp3/mp4/m3u8...) - không bắt được stream có DRM/mã hoá.</p>
+  <div id="mediaList" class="hint">Đang tải...</div>
 
   <p class="hint">Mẹo: chuột phải vào 1 liên kết hoặc vào khoảng trống của trang → menu "FileListDownloader" để gửi link bất cứ lúc nào, không cần bật tự động bắt link.</p>
 

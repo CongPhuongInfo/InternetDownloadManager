@@ -52,6 +52,7 @@ tải duy nhất) - không còn khái niệm "dự án" riêng biệt như bản
 | `FileListBuilder.vb` | Quét thư mục nguồn, sinh danh sách URL, lưu ra `.txt`. |
 | `DownloadItem.vb` | `DownloadStatus` enum, `DownloadSegment` (1 đoạn tải), `DownloadItem` (1 tệp cần tải, gồm nhiều segment). |
 | `FileDownloader.vb` | Engine tải **một** tệp: dò dung lượng/hỗ trợ Range, chia segment, tải song song bằng nhiều `Thread`. |
+| `HlsDownloader.vb` | Engine tải stream HLS (`.m3u8`): chọn chất lượng cao nhất, tải + ghép nối các đoạn `.ts`. Chỉ hỗ trợ stream không mã hoá. |
 | `DownloadQueueManager.vb` | Điều phối **hàng đợi**: N tệp tải cùng lúc, Tạm dừng/Tiếp tục/Huỷ toàn bộ hoặc từng dòng, thêm tệp mới vào hàng đợi đang chạy. |
 | `DownloadQueueState.vb` | Lưu/khôi phục hàng đợi (1 tệp `temp\queue.txt` duy nhất cho toàn bộ danh sách), kèm vị trí từng segment. |
 | `BrowserBridgeServer.vb` | Máy chủ HTTP nội bộ (`HttpListener`, chỉ nghe `127.0.0.1`) nhận URL do extension trình duyệt gửi tới. |
@@ -59,13 +60,27 @@ tải duy nhất) - không còn khái niệm "dự án" riêng biệt như bản
 | `CreateListDialog.vb` | Hộp thoại "Tạo danh sách liên kết từ thư mục". |
 | `DownloadFromListDialog.vb` | Hộp thoại "Tải theo danh sách có sẵn". |
 | `SettingsDialog.vb` | Hộp thoại "Cài đặt". |
+| `BrowserDownloadPromptDialog.vb` | Hộp thoại xác nhận khi nhận link thủ công từ trình duyệt; cũng chứa hàm lấy thư mục Downloads thật của Windows. |
 | `Form1.vb` | Cửa sổ chính: menu, toolbar, lưới (owner-draw), thanh trạng thái, khay hệ thống. |
 | `Program.vb` | Điểm vào chương trình (`Main`). |
 | `BrowserExtension/` | Extension Chrome/Edge (Manifest V3) gửi link tải sang app qua `BrowserBridgeServer`. |
 
+## Cấu trúc thư mục
+
+```
+IDManager/
+├── src/            <- toàn bộ mã nguồn .vb
+├── bin/            <- IDManager.exe sau khi build (tự tạo, không commit)
+│   ├── temp/       <- settings.txt, queue.txt (tự tạo lúc chạy)
+│   └── data/       <- danh sách liên kết .txt (tự tạo lúc chạy)
+├── BrowserExtension/
+└── build.bat
+```
+
 ## Build
 
-Chạy `build.bat` (tự dò `vbc.exe` của .NET Framework 4.x trong `%WINDIR%\Microsoft.NET\Framework[64]\`).
+Chạy `build.bat` ở thư mục gốc (tự dò `vbc.exe` của .NET Framework 4.x trong
+`%WINDIR%\Microsoft.NET\Framework[64]\`, biên dịch mã nguồn trong `src\`, xuất ra `bin\IDManager.exe`).
 Không cần Visual Studio.
 
 ## Ghi chú / giới hạn đã biết

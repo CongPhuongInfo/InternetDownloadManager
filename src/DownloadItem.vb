@@ -70,6 +70,7 @@ Public Class DownloadItem
     Public Segments As List(Of DownloadSegment)
     Public LastError As String
     Public Referer As String           ' Trang nguồn của link (nếu có) - 1 số host yêu cầu đúng Referer mới cho tải
+    Public Cookie As String            ' Chuỗi Cookie (dạng "a=1; b=2") lấy từ phiên trình duyệt - cần cho link yêu cầu đăng nhập/session
 
     ' Cờ điều khiển - do DownloadQueueManager / thao tác từng dòng trên lưới đặt,
     ' các luồng tải nền tự kiểm tra định kỳ để dừng đúng chỗ.
@@ -81,15 +82,50 @@ Public Class DownloadItem
     Public LastSampleTicks As Long
     Public CurrentSpeedBps As Double
 
+    ' ---- HLS (.m3u8) ----
+    ''' <summary>True nếu URL gốc là playlist HLS (m3u8) thay vì 1 tệp thường - khi đó FileDownloader
+    ''' sẽ giao việc tải cho HlsDownloader thay vì cơ chế byte-range/Segments ở trên (chỉ dùng cho
+    ''' tệp thường). Segments (byte-range) không được dùng cho loại item này.</summary>
+    Public IsHlsStream As Boolean = False
+
+    ''' <summary>Danh sách URL các đoạn .ts (đã resolve tuyệt đối), theo đúng thứ tự phát - Nothing
+    ''' cho tới khi HlsDownloader parse xong playlist lần đầu.</summary>
+    Public HlsSegmentUrls As List(Of String)
+
+    Private _hlsSegmentsDone As Long
+
+    ''' <summary>Số đoạn .ts đã tải xong và ghi vào tệp đích - dùng Interlocked vì luồng tải nền ghi,
+    ''' luồng UI đọc để hiển thị tiến độ (đơn vị "đoạn", không phải byte, vì không biết trước tổng
+    ''' dung lượng của cả stream cho tới khi tải xong).</summary>
+    Public ReadOnly Property HlsSegmentsDone As Long
+        Get
+            Return Interlocked.Read(_hlsSegmentsDone)
+        End Get
+    End Property
+
+    Public Sub AddHlsSegmentDone()
+        Interlocked.Increment(_hlsSegmentsDone)
+    End Sub
+
+    Private _hlsBytesDownloaded As Long
+
+    ''' <summary>Tổng byte thực tế đã ghi ra đĩa cho stream HLS - dùng để tính tốc độ tức thời
+    ''' giống hệt cách DownloadedBytes dùng cho tệp thường.</summary>
+    Public Sub AddHlsBytesDownloaded(count As Long)
+        Interlocked.Add(_hlsBytesDownloaded, count)
+    End Sub
+
     Public Sub New()
         TotalBytes = -1L
         Status = DownloadStatus.Pending
         Segments = New List(Of DownloadSegment)
     End Sub
 
-    ''' <summary>Tổng số byte đã tải được của tệp này (cộng dồn từ tất cả các segment).</summary>
+    ''' <summary>Tổng số byte đã tải được của tệp này. Với tệp thường: cộng dồn Segments (byte-range).
+    ''' Với stream HLS: đọc bộ đếm byte riêng vì Segments không được dùng cho loại item này.</summary>
     Public ReadOnly Property DownloadedBytes As Long
         Get
+            If IsHlsStream Then Return Interlocked.Read(_hlsBytesDownloaded)
             Dim total As Long = 0
             For Each seg As DownloadSegment In Segments
                 total += seg.Downloaded

@@ -97,9 +97,68 @@ function onFloaterToggle(e) {
   }
 }
 
+function kindLabel(item) {
+  const u = item.url.split("?")[0].toLowerCase();
+  if (u.endsWith(".m3u8")) return "HLS";
+  if (u.endsWith(".mpd")) return "DASH";
+  if (/^video\//i.test(item.contentType) || /\.(mp4|webm|mkv|mov|avi|wmv)$/i.test(u)) return "video";
+  if (/^audio\//i.test(item.contentType) || /\.(mp3|m4a|flac)$/i.test(u)) return "audio";
+  return "file";
+}
+
+function renderMediaList(list) {
+  const box = document.getElementById("mediaList");
+  box.className = "";
+  if (!list || list.length === 0) {
+    box.className = "hint";
+    box.textContent = "Chưa phát hiện link media nào trên tab này.";
+    return;
+  }
+
+  box.innerHTML = "";
+  list.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "mediaItem";
+
+    const tag = document.createElement("span");
+    tag.className = "kindTag";
+    tag.textContent = kindLabel(item);
+
+    const name = document.createElement("span");
+    name.className = "name";
+    name.title = item.url;
+    name.textContent = item.filename;
+
+    const btn = document.createElement("button");
+    btn.textContent = "Gửi";
+    btn.addEventListener("click", () => {
+      btn.textContent = "...";
+      btn.disabled = true;
+      chrome.runtime.sendMessage(
+        { action: "sendFoundMedia", url: item.url, filename: item.filename },
+        (resp) => {
+          btn.textContent = resp && resp.ok ? "✓ Đã gửi" : "Lỗi";
+        }
+      );
+    });
+
+    row.appendChild(tag);
+    row.appendChild(name);
+    row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function loadMediaList() {
+  chrome.runtime.sendMessage({ action: "getFoundMedia" }, (resp) => {
+    renderMediaList(resp && resp.list);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   load();
   loadFloaterStatus();
+  loadMediaList();
   document.getElementById("btnSave").addEventListener("click", save);
   document.getElementById("btnPing").addEventListener("click", ping);
   document.getElementById("btnScan").addEventListener("click", scanCurrentTab);

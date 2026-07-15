@@ -67,7 +67,7 @@ Public Class SettingsDialog
         Segments = CInt(nudSegments.Value)
         Concurrent = CInt(nudConcurrent.Value)
         DefaultDownloadFolder = If(String.IsNullOrWhiteSpace(txtDefaultFolder.Text),
-                                    Path.Combine(Directory.GetCurrentDirectory(), "Download"),
+                                    BrowserDownloadPromptDialog.GetSystemDownloadsFolder(),
                                     txtDefaultFolder.Text)
         BrowserBridgeEnabled = chkBrowserBridge.Checked
         BrowserBridgePort = CInt(nudBridgePort.Value)

@@ -80,7 +80,7 @@ Public Class DownloadFromListDialog
         End Try
 
         Dim downloadRoot As String = If(String.IsNullOrWhiteSpace(txtDownloadRoot.Text),
-                                         Path.Combine(Directory.GetCurrentDirectory(), "Download"),
+                                         BrowserDownloadPromptDialog.GetSystemDownloadsFolder(),
                                          txtDownloadRoot.Text)
         Dim finalFolder As String = downloadRoot
         If Not String.IsNullOrWhiteSpace(txtSubFolder.Text) Then

@@ -44,6 +44,13 @@ Public Class FileDownloader
     ''' tạo ra, trả về khi tệp đã Hoàn tất / Tạm dừng / Lỗi / Huỷ (xem item.Status khi hàm trả về).
     ''' </summary>
     Public Shared Sub Download(item As DownloadItem, segmentCount As Integer)
+        ' Stream HLS (.m3u8) dung co che khac han (playlist + nhieu doan .ts noi tiep, khong phai
+        ' byte-range tren 1 URL duy nhat) - giao thang cho HlsDownloader, khong dung logic ben duoi.
+        If item.IsHlsStream Then
+            HlsDownloader.Download(item)
+            Return
+        End If
+
         Try
             Dim dir As String = Path.GetDirectoryName(item.LocalPath)
             If Not String.IsNullOrEmpty(dir) AndAlso Not Directory.Exists(dir) Then
@@ -104,12 +111,17 @@ Public Class FileDownloader
     ''' <summary>Dò nhanh dung lượng tệp từ xa (không tải, chỉ hỏi header) - dùng cho hộp thoại xác
     ''' nhận trước khi tải. Trả về -1 nếu không xác định được (lỗi mạng, server không trả kích thước...).</summary>
     Public Shared Function ProbeRemoteSize(url As String, referer As String) As Long
+        Return ProbeRemoteSize(url, referer, Nothing)
+    End Function
+
+    Public Shared Function ProbeRemoteSize(url As String, referer As String, cookie As String) As Long
         Try
             Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)
             req.Method = "GET"
             req.Timeout = 15000
             req.UserAgent = "FileListDownloader/2CongLC"
             If Not String.IsNullOrEmpty(referer) Then req.Referer = referer
+            If Not String.IsNullOrEmpty(cookie) Then req.Headers.Add(HttpRequestHeader.Cookie, cookie)
             req.AddRange(0, 0)
 
             Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)
@@ -145,6 +157,7 @@ Public Class FileDownloader
             probe.Timeout = DEFAULT_TIMEOUT
             probe.UserAgent = "FileListDownloader/2CongLC"
             If Not String.IsNullOrEmpty(item.Referer) Then probe.Referer = item.Referer
+            If Not String.IsNullOrEmpty(item.Cookie) Then probe.Headers.Add(HttpRequestHeader.Cookie, item.Cookie)
             probe.AddRange(0, 0)
 
             Using resp As HttpWebResponse = CType(probe.GetResponse(), HttpWebResponse)
@@ -217,6 +230,7 @@ Public Class FileDownloader
             req.ReadWriteTimeout = DEFAULT_TIMEOUT
             req.UserAgent = "FileListDownloader/2CongLC"
             If Not String.IsNullOrEmpty(item.Referer) Then req.Referer = item.Referer
+            If Not String.IsNullOrEmpty(item.Cookie) Then req.Headers.Add(HttpRequestHeader.Cookie, item.Cookie)
 
             ' HttpWebRequest.AddRange chỉ có overload kiểu Integer (32-bit) trên .NET Framework 4.x,
             ' nên với tệp/đoạn vượt quá 2GB sẽ không set Range chính xác được - giữ đúng giới hạn
